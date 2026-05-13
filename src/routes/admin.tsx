@@ -123,9 +123,9 @@ function ContentEditor() {
     }
     setSaving(true);
     const rows = [
-      { key: "hero", value: hero as unknown as object },
-      { key: "brand", value: brand as unknown as object },
-      { key: "attributes", value: attrs as unknown as object },
+      { key: "hero", value: hero as never },
+      { key: "brand", value: brand as never },
+      { key: "attributes", value: attrs as never },
     ];
     const { error } = await supabase.from("site_content").upsert(rows);
     setSaving(false);
