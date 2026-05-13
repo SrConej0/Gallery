@@ -16,7 +16,7 @@ import {
 import type { Tables } from "@/integrations/supabase/types";
 import { toast, Toaster } from "sonner";
 
-export const Route = createFileRoute("/admin")({ component: AdminPage });
+export const Route = createFileRoute("/admin")({ component: AdminPage, ssr: false });
 
 const SESSION_KEY = "nalla_admin_session";
 
