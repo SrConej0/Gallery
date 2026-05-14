@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  fetchProducts,
   fetchSiteContent,
   defaultHero,
   defaultBrand,
@@ -12,7 +12,6 @@ import {
   type HeroContent,
   type BrandContent,
   type AttributeItem,
-  defaultProducts,
 } from "@/lib/site";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast, Toaster } from "sonner";
@@ -31,52 +30,93 @@ import {
 
 export const Route = createFileRoute("/admin")({ component: AdminPage, ssr: false });
 
-const SESSION_KEY = "nalla_admin_session";
-
 function AdminPage() {
-  const [authed, setAuthed] = useState(false);
-  const [user, setUser] = useState("");
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && sessionStorage.getItem(SESSION_KEY) === "ok") setAuthed(true);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+      if (!s) { setIsAdmin(false); setLoading(false); return; }
+      // Defer role check
+      setTimeout(async () => {
+        const { data } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", s.user.id)
+          .eq("role", "admin")
+          .maybeSingle();
+        setIsAdmin(!!data);
+        setLoading(false);
+      }, 0);
+    });
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    return () => subscription.unsubscribe();
   }, []);
 
-  if (!authed) {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    const fn = mode === "signin"
+      ? supabase.auth.signInWithPassword({ email, password: pass })
+      : supabase.auth.signUp({ email, password: pass, options: { emailRedirectTo: `${window.location.origin}/admin` } });
+    const { error } = await fn;
+    setSubmitting(false);
+    if (error) toast.error(error.message);
+    else if (mode === "signup") toast.success("Cuenta creada. Iniciando sesión...");
+  }
+
+  if (loading && session) {
+    return <div className="flex min-h-screen items-center justify-center bg-cream text-sm text-ink/60">Cargando...</div>;
+  }
+
+  if (!session) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-cream px-6">
         <Toaster position="top-center" />
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (user === "admin" && pass === "admin123") {
-              sessionStorage.setItem(SESSION_KEY, "ok");
-              setAuthed(true);
-            } else toast.error("Credenciales incorrectas");
-          }}
-          className="w-full max-w-sm space-y-6 border border-border bg-card p-10 shadow-lg"
-        >
+        <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-6 border border-border bg-card p-10 shadow-lg">
           <div className="text-center">
             <h1 className="font-serif text-3xl text-ink">ÑALLA</h1>
             <p className="mt-2 text-[11px] tracking-[0.32em] text-ink/60">ADMIN PANEL</p>
           </div>
           <label className="block">
-            <span className="text-xs tracking-wide text-ink/70">Usuario</span>
-            <input value={user} onChange={(e) => setUser(e.target.value)} autoFocus className="mt-1 w-full border border-border bg-background px-3 py-2 text-sm outline-none focus:border-ink" />
+            <span className="text-xs tracking-wide text-ink/70">Email</span>
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus className="mt-1 w-full border border-border bg-background px-3 py-2 text-sm outline-none focus:border-ink" />
           </label>
           <label className="block">
             <span className="text-xs tracking-wide text-ink/70">Contraseña</span>
-            <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} className="mt-1 w-full border border-border bg-background px-3 py-2 text-sm outline-none focus:border-ink" />
+            <input type="password" required minLength={6} value={pass} onChange={(e) => setPass(e.target.value)} className="mt-1 w-full border border-border bg-background px-3 py-2 text-sm outline-none focus:border-ink" />
           </label>
-          <button className="w-full bg-ink py-3 text-[12px] tracking-[0.28em] text-cream hover:opacity-90">ENTRAR</button>
-          <p className="text-center text-[11px] text-ink/50">Demo: admin / admin123</p>
+          <button disabled={submitting} className="w-full bg-ink py-3 text-[12px] tracking-[0.28em] text-cream hover:opacity-90 disabled:opacity-50">
+            {submitting ? "..." : mode === "signin" ? "ENTRAR" : "CREAR CUENTA"}
+          </button>
+          <button type="button" onClick={() => setMode(mode === "signin" ? "signup" : "signin")} className="block w-full text-center text-[11px] text-ink/60 underline-offset-4 hover:underline">
+            {mode === "signin" ? "¿Primera vez? Crear cuenta de admin" : "Ya tengo cuenta — iniciar sesión"}
+          </button>
+          <p className="text-center text-[11px] text-ink/50">La primera cuenta creada será admin automáticamente.</p>
           <Link to="/" className="block text-center text-[11px] text-ink/60 underline-offset-4 hover:underline">← Volver al sitio</Link>
         </form>
       </div>
     );
   }
 
-  return <AdminDashboard onLogout={() => { sessionStorage.removeItem(SESSION_KEY); setAuthed(false); }} />;
+  if (!isAdmin) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-cream px-6 gap-4 text-center">
+        <Toaster position="top-center" />
+        <h1 className="font-serif text-3xl text-ink">Acceso restringido</h1>
+        <p className="text-sm text-ink/60 max-w-md">Tu cuenta ({session.user.email}) no tiene permisos de administrador.</p>
+        <button onClick={() => supabase.auth.signOut()} className="bg-ink px-6 py-2 text-[12px] tracking-[0.28em] text-cream hover:opacity-90">CERRAR SESIÓN</button>
+      </div>
+    );
+  }
+
+  return <AdminDashboard onLogout={() => supabase.auth.signOut()} />;
 }
 
 function AdminDashboard({ onLogout }: { onLogout: () => void }) {
@@ -324,22 +364,29 @@ const importableProducts = [
   { name: "Signature Alpaca Beanie", description: "Classic beanie hat in soft baby alpaca.", price: 120, image_url: "https://images.unsplash.com/photo-1558769132-cb1202158259?w=1200", category: "Accessories", sort_order: 12 },
 ];
 
-type EditableProduct = Partial<Tables<"products">> & { id?: string | number; isNew?: boolean };
+type EditableProduct = Omit<Partial<Tables<"products">>, "id"> & { id?: string; isNew?: boolean };
 
 function ProductsEditor() {
   const qc = useQueryClient();
-  const { data: supabaseProducts, isLoading } = useQuery({ queryKey: ["products"], queryFn: () => supabase.from("products").select("*").order("sort_order", { ascending: true }) });
-  
+  const { data: supabaseProducts, isLoading } = useQuery({
+    queryKey: ["products"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("products").select("*").order("sort_order", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const [tab, setTab] = useState<"my" | "import">("my");
-  const [editingId, setEditingId] = useState<string | number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<number | null>(null);
   const [editableProducts, setEditableProducts] = useState<EditableProduct[]>([]);
 
   useEffect(() => {
-    if (supabaseProducts?.data) {
-      setEditableProducts([...supabaseProducts.data]);
+    if (supabaseProducts) {
+      setEditableProducts([...supabaseProducts]);
     }
-  }, [supabaseProducts?.data]);
+  }, [supabaseProducts]);
 
   const importSingleProduct = async (product: typeof importableProducts[0], index: number) => {
     setImportingId(index);
@@ -456,7 +503,7 @@ function ProductsEditor() {
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <h2 className="font-serif text-3xl text-ink">Productos ({editableProducts.length})</h2>
             <button 
-              onClick={() => setEditableProducts([...editableProducts, { name: "", price: 0, sort_order: editableProducts.length + 1, isNew: true, id: Date.now() }])}
+              onClick={() => setEditableProducts([...editableProducts, { name: "", price: 0, sort_order: editableProducts.length + 1, isNew: true, id: `new-${Date.now()}` }])}
               className="flex items-center gap-2 bg-ink px-6 py-2.5 text-[12px] tracking-[0.28em] text-cream hover:opacity-90"
             >
               <Plus className="w-4 h-4" /> NUEVO PRODUCTO
@@ -483,9 +530,9 @@ function ProductsEditor() {
                       key={String(p.id)} 
                       product={p} 
                       isEditing={editingId === p.id}
-                      onEdit={() => setEditingId(p.id)}
+                      onEdit={() => setEditingId(p.id ?? null)}
                       onSave={() => saveProductInline(p)}
-                      onDelete={() => p.id && !p.isNew ? deleteProduct(String(p.id)) : setEditableProducts(editableProducts.filter(x => x.id !== p.id))}
+                      onDelete={() => p.id && !p.isNew ? deleteProduct(p.id) : setEditableProducts(editableProducts.filter(x => x.id !== p.id))}
                       onMoveUp={() => moveProduct(index, -1)}
                       onMoveDown={() => moveProduct(index, 1)}
                       isFirst={index === 0}
