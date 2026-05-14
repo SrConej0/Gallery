@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Instagram, Pin, Facebook, Twitter } from "lucide-react";
+import { Instagram, Facebook, Twitter, Heart } from "lucide-react";
 
 export function Footer({ brand }: { brand: { name: string; tagline: string } }) {
   return (
@@ -24,9 +24,6 @@ export function Footer({ brand }: { brand: { name: string; tagline: string } }) 
             <div className="flex items-center gap-4 pt-4">
               <a href="#" className="p-3 bg-cream border border-border rounded-full text-ink/70 hover:text-ink hover:bg-ink hover:text-cream hover:border-ink transition-all duration-300 hover:shadow-lg">
                 <Instagram className="w-5 h-5" />
-              </a>
-              <a href="#" className="p-3 bg-cream border border-border rounded-full text-ink/70 hover:text-ink hover:bg-ink hover:text-cream hover:border-ink transition-all duration-300 hover:shadow-lg">
-                <Pin className="w-5 h-5" />
               </a>
               <a href="#" className="p-3 bg-cream border border-border rounded-full text-ink/70 hover:text-ink hover:bg-ink hover:text-cream hover:border-ink transition-all duration-300 hover:shadow-lg">
                 <Facebook className="w-5 h-5" />
@@ -84,7 +81,7 @@ export function Footer({ brand }: { brand: { name: string; tagline: string } }) 
         <div className="pt-10 border-t border-border/60">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <p className="text-xs text-ink/45">
-              © {new Date().getFullYear()} {brand.name}. All rights reserved.
+              © {new Date().getFullYear()} {brand.name}. All rights reserved. Hecho con <Heart className="w-3 h-3 inline text-destructive" />
             </p>
             <div className="flex items-center gap-6 text-xs text-ink/45">
               <a href="#" className="hover:text-ink/70 transition-colors duration-300">Términos y condiciones</a>
